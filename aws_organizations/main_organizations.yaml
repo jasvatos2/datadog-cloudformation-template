@@ -40,15 +40,6 @@ Parameters:
       Disable this if you only want to collect tags or resource configuration information from this AWS account,
       and do not want to use Datadog Infrastructure Monitoring.
     Default: false
-  DisableResourceCollection:
-    Type: String
-    AllowedValues:
-      - true
-      - false
-    Description: >-
-      Disabling resource collection for this account will lead to a loss in visibility into your AWS services. 
-      Disable this if you do not want to collect configuration information for the resources in this AWS account.
-    Default: false
   CloudSecurityPostureManagement:
     Type: String
     AllowedValues:
@@ -60,24 +51,12 @@ Parameters:
       Datadog CSPM is a product that automatically detects resource misconfigurations in your AWS account according to
       industry benchmarks. More info: https://www.datadoghq.com/product/security-platform/cloud-security-posture-management/
     Default: false
-Rules:
-  ResourceCollectionValidState:
-    Assertions:
-      - Assert:
-          Fn::Not:
-            - Fn::And:
-                - Fn::Equals:
-                    - Ref: DisableResourceCollection
-                    - 'true'
-                - Fn::Equals:
-                    - Ref: CloudSecurityPostureManagement
-                    - 'true'
-        AssertDescription: CloudSecurityPostureManagement requires ResourceCollection, must enable ResourceCollection
+
 Conditions:
-  ResourceCollectionPermissions:
+  ShouldInstallCSPMPolicy:
     Fn::Equals:
-      - !Ref DisableResourceCollection
-      - false
+      - Ref: CloudSecurityPostureManagement
+      - true
   IsAP1:
     Fn::Equals:
       - !Ref DatadogSite
@@ -99,6 +78,7 @@ Resources:
       Path: "/"
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
   DatadogAPICall:
     Type: "Custom::DatadogAPICall"
     Properties:
@@ -111,7 +91,6 @@ Resources:
       HostTags: [ !Sub "aws_account:${AWS::AccountId}" ]
       CloudSecurityPostureManagement: !Ref CloudSecurityPostureManagement
       DisableMetricCollection: !Ref DisableMetricCollection
-      DisableResourceCollection: !Ref DisableResourceCollection
   DatadogAPICallFunction:
     Type: "AWS::Lambda::Function"
     Properties:
@@ -144,7 +123,6 @@ Resources:
               host_tags = event['ResourceProperties']['HostTags']
               cspm = event['ResourceProperties']['CloudSecurityPostureManagement']
               metrics_disabled = event['ResourceProperties']['DisableMetricCollection']
-              resource_collection_disabled = event['ResourceProperties']['DisableResourceCollection']
 
               # Make the url Request
               url = 'https://api.' + api_url + '/api/v1/integration/aws'
@@ -156,7 +134,6 @@ Resources:
                   values["host_tags"] = host_tags
                   values["cspm_resource_collection_enabled"] = cspm == "true"
                   values["metrics_collection_enabled"] = metrics_disabled == "false"
-                  values["extended_resource_collection_enabled"] = resource_collection_disabled == "false"
 
               headers = {
                   'DD-API-KEY': api_key,
@@ -284,7 +261,7 @@ Resources:
                 'sts:ExternalId': !GetAtt DatadogAPICall.ExternalId
       Path: /
       RoleName: !Ref IAMRoleName
-      ManagedPolicyArns: !If [ ResourceCollectionPermissions, [ !Sub "arn:${AWS::Partition}:iam::aws:policy/SecurityAudit" ], !Ref AWS::NoValue ]
+      ManagedPolicyArns: !If [ ShouldInstallCSPMPolicy, [ !Sub "arn:${AWS::Partition}:iam::aws:policy/SecurityAudit" ], !Ref AWS::NoValue ]
       Policies:
         - PolicyName: DatadogAWSIntegrationPolicy
           PolicyDocument:
@@ -296,11 +273,7 @@ Resources:
                   - 'apigateway:GET'
                   - 'autoscaling:Describe*'
                   - 'backup:List*'
-                  - 'backup:ListRecoveryPointsByBackupVault'
-                  - 'bcm-data-exports:GetExport'
-                  - 'bcm-data-exports:ListExports'
                   - 'budgets:ViewBudget'
-                  - 'cassandra:Select'
                   - 'cloudfront:GetDistributionConfig'
                   - 'cloudfront:ListDistributions'
                   - 'cloudtrail:DescribeTrails'
@@ -309,42 +282,37 @@ Resources:
                   - 'cloudwatch:Describe*'
                   - 'cloudwatch:Get*'
                   - 'cloudwatch:List*'
-                  - 'codedeploy:BatchGet*'
                   - 'codedeploy:List*'
-                  - 'cur:DescribeReportDefinitions'
+                  - 'codedeploy:BatchGet*'
                   - 'directconnect:Describe*'
-                  - 'dynamodb:Describe*'
                   - 'dynamodb:List*'
+                  - 'dynamodb:Describe*'
                   - 'ec2:Describe*'
-                  - 'ec2:GetSnapshotBlockPublicAccessState'
                   - 'ec2:GetTransitGatewayPrefixListReferences'
                   - 'ec2:SearchTransitGatewayRoutes'
                   - 'ecs:Describe*'
                   - 'ecs:List*'
                   - 'elasticache:Describe*'
                   - 'elasticache:List*'
-                  - 'elasticfilesystem:DescribeAccessPoints'
                   - 'elasticfilesystem:DescribeFileSystems'
                   - 'elasticfilesystem:DescribeTags'
+                  - 'elasticfilesystem:DescribeAccessPoints'
                   - 'elasticloadbalancing:Describe*'
-                  - 'elasticmapreduce:Describe*'
                   - 'elasticmapreduce:List*'
-                  - 'es:DescribeElasticsearchDomains'
-                  - 'es:ListDomainNames'
+                  - 'elasticmapreduce:Describe*'
                   - 'es:ListTags'
+                  - 'es:ListDomainNames'
+                  - 'es:DescribeElasticsearchDomains'
                   - 'events:CreateEventBus'
                   - 'fsx:DescribeFileSystems'
                   - 'fsx:ListTagsForResource'
-                  - 'glacier:GetVaultNotifications'
-                  - 'glue:ListRegistries'
-                  - 'health:DescribeAffectedEntities'
-                  - 'health:DescribeEventDetails'
                   - 'health:DescribeEvents'
-                  - 'kinesis:Describe*'
+                  - 'health:DescribeEventDetails'
+                  - 'health:DescribeAffectedEntities'
                   - 'kinesis:List*'
+                  - 'kinesis:Describe*'
                   - 'lambda:GetPolicy'
                   - 'lambda:List*'
-                  - 'lightsail:GetInstancePortStates'
                   - 'logs:DeleteSubscriptionFilter'
                   - 'logs:DescribeLogGroups'
                   - 'logs:DescribeLogStreams'
@@ -352,8 +320,8 @@ Resources:
                   - 'logs:FilterLogEvents'
                   - 'logs:PutSubscriptionFilter'
                   - 'logs:TestMetricFilter'
-                  - 'oam:ListAttachedLinks'
                   - 'oam:ListSinks'
+                  - 'oam:ListAttachedLinks'
                   - 'organizations:Describe*'
                   - 'organizations:List*'
                   - 'rds:Describe*'
@@ -361,37 +329,26 @@ Resources:
                   - 'redshift:DescribeClusters'
                   - 'redshift:DescribeLoggingStatus'
                   - 'route53:List*'
-                  - 's3:GetBucketLocation'
                   - 's3:GetBucketLogging'
+                  - 's3:GetBucketLocation'
                   - 's3:GetBucketNotification'
                   - 's3:GetBucketTagging'
-                  - 's3:ListAccessGrants'
                   - 's3:ListAllMyBuckets'
                   - 's3:PutBucketNotification'
-                  - 'savingsplans:DescribeSavingsPlanRates'
-                  - 'savingsplans:DescribeSavingsPlans'
                   - 'ses:Get*'
-                  - 'sns:GetSubscriptionAttributes'
                   - 'sns:List*'
                   - 'sns:Publish'
+                  - 'sns:GetSubscriptionAttributes'
                   - 'sqs:ListQueues'
-                  - 'states:DescribeStateMachine'
                   - 'states:ListStateMachines'
+                  - 'states:DescribeStateMachine'
                   - 'support:DescribeTrustedAdvisor*'
                   - 'support:RefreshTrustedAdvisorCheck'
                   - 'tag:GetResources'
                   - 'tag:GetTagKeys'
                   - 'tag:GetTagValues'
-                  - 'timestream:DescribeEndpoints'
-                  - 'waf-regional:ListRuleGroups'
-                  - 'waf-regional:ListRules'
-                  - 'waf:ListRuleGroups'
-                  - 'waf:ListRules'
-                  - 'wafv2:GetIPSet'
-                  - 'wafv2:GetLoggingConfiguration'
-                  - 'wafv2:GetRegexPatternSet'
-                  - 'wafv2:GetRuleGroup'
                   - 'wafv2:ListLoggingConfigurations'
+                  - 'wafv2:GetLoggingConfiguration'
                   - 'xray:BatchGetTraces'
                   - 'xray:GetTraceSummaries'
 Metadata:
@@ -409,7 +366,6 @@ Metadata:
         Parameters:
           - IAMRoleName
           - DisableMetricCollection
-          - DisableResourceCollection
     ParameterLabels:
       DatadogApiKey:
         default: "DatadogApiKey *"
