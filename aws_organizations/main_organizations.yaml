@@ -74,15 +74,32 @@ Rules:
                     - Ref: CloudSecurityPostureManagement
                     - "true"
         AssertDescription: CloudSecurityPostureManagement requires ResourceCollection, must enable ResourceCollection
+Mappings:
+  DDGovAccountsMap:
+    ddog-gov.com:
+      Account: "065115117704"
+  DDComAccountsMap:
+    ap1.datadoghq.com: 
+      Account: "417141415827"
+    aws-datadoghq.eu: 
+      Account: "464622532012"
+    aws-datadoghq.com:
+      Account: "464622532012"
+    aws-us3.datadoghq.com:
+      Account: "464622532012"
+    aws-us5.datadoghq.com:
+      Account: "464622532012"
+    ddog-gov.com:
+      Account: "392588925713"
 Conditions:
   ResourceCollectionPermissions:
     Fn::Equals:
       - !Ref DisableResourceCollection
       - false
-  IsAP1:
+  IsGovCloud:
     Fn::Equals:
-      - !Ref DatadogSite
-      - ap1.datadoghq.com
+      - !Ref AWS::Partition
+      - aws-us-gov
 
 Resources:
   DatadogAPIHandlerLambdaExecutionRole:
@@ -93,8 +110,22 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - lambda.amazonaws.com
+              Fn::If:
+                  - IsGovCloud
+                  # Get ddog-gov.com partition account numbers
+                  - AWS: !Sub 
+                    - "arn:${AWS::Partition}:iam::${DDAccountNumber}:root"
+                    - DDAccountNumber: !FindInMap
+                      - DDGovAccountsMap
+                      - !Ref DatadogSite
+                      - Account
+                  # Get US/EU/AP1 account numbers
+                  - AWS: !Sub
+                    - "arn:${AWS::Partition}:iam::${DDAccountNumber}:root"
+                    - DDAccountNumber: !FindInMap
+                      - DDComAccountsMap
+                      - !Ref DatadogSite
+                      - Account
             Action:
               - sts:AssumeRole
       Path: "/"
