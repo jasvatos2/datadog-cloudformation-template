@@ -331,12 +331,12 @@ Resources:
               [Unit]
               Description=Daily apt upgrade and clean activities
               After=apt-daily.timer
-              
+
               [Timer]
               OnActiveSec=10min
               OnCalendar=0/3:00:00
               Persistent=true
-              
+
               [Install]
               WantedBy=timers.target
               EOF
@@ -380,7 +380,7 @@ Resources:
               api_key: $DD_API_KEY
               site: $DD_SITE
               installation_mode: cloudformation
-              installation_version: 0.11.4
+              installation_version: 0.11.5
               default_roles:
                 - "arn:aws:iam::${AWS::AccountId}:role/${ScannerDelegateRoleName}"
               EOF
@@ -1029,7 +1029,7 @@ Resources:
           import json
           import logging
           import signal
-          from urllib.request import build_opener, HTTPHandler, Request
+          from urllib.request import build_opener, HTTPHandler, HTTPError, Request
           import urllib.parse
 
           LOGGER = logging.getLogger()
@@ -1058,8 +1058,13 @@ Resources:
                   url = url + '/' + account_id
                   request = Request(url, headers=headers)
                   request.get_method = lambda: method
-                  response = urllib.request.urlopen(request)
-                  return response
+                  try:
+                    return urllib.request.urlopen(request)
+                  except HTTPError as e:
+                    if e.code != 404:
+                      raise e
+                    else:
+                      return e
               elif method == "POST":
                   values = {
                       "data": {
@@ -1075,15 +1080,32 @@ Resources:
                   }
                   data = json.dumps(values)
                   data = data.encode('utf-8')  # data should be bytes
-                  request = Request(url, data=data, headers=headers)
+                  url_account_id = url + '/' + account_id
+                  if is_agentless_scanning_enabled(url_account_id, headers):
+                      request = Request(url_account_id, data=data, headers=headers)
+                      request.get_method = lambda: 'PATCH'
+                  else:
+                      request = Request(url, data=data, headers=headers)
+                      request.get_method = lambda: 'POST'
                   request.add_header('Content-Type', 'application/vnd.api+json; charset=utf-8')
                   request.add_header('Content-Length', len(data))
-                  request.get_method = lambda: method
                   response = urllib.request.urlopen(request)
                   return response
               else:
                   LOGGER.error('Unsupported HTTP method.')
                   return None
+
+          def is_agentless_scanning_enabled(url_account_id, headers):
+              '''Check if agentless scanning is already enabled for the account'''
+              try:
+                request = Request(url_account_id, headers=headers)
+                request.get_method = lambda: 'GET'
+                response = urllib.request.urlopen(request)
+                return response.getcode() == 200
+              except HTTPError as e:
+                if e.code != 404:
+                  raise e
+                return False
 
           def handler(event, context):
               '''Handle Lambda event from AWS'''
@@ -1091,8 +1113,7 @@ Resources:
                   if event['RequestType'] == 'Create':
                       LOGGER.info('Received Create request.')
                       response = call_datadog_agentless_api(event, 'POST')
-                      if response.getcode() == 201:
-                          json_response = json.loads(response.read().decode("utf-8"))
+                      if response.getcode() == 201 or response.getcode() == 204:
                           send_response(event, context, "SUCCESS",
                                         {
                                             "Message": "Datadog AWS Agentless Scanning Integration created successfully.",

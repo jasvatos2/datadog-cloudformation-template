@@ -1,3 +1,59 @@
+## 2.1.9 (March 13, 2025)
+
+Aligning template versions
+
+## 2.1.8 (March 13, 2025)
+
+### Features
+
+Adding permissions to support resource collection for the following services:
+
+- Amplify
+- Appstream
+- Batch
+- Deadline Cloud
+- Identity Store
+- Image builder (EC2)
+- Pinpoint (mobiletargeting)
+- SMS Voice
+- Social messaging
+
+## 2.1.7 (February 26, 2025)
+
+### Features
+
+Adding permissions to support resource collection for the following services:
+
+- EMR Containers
+- Grafana
+- IoT Greengrass v2
+- Macie
+- Opensearch Ingestion (osis)
+- Opensearch serverless
+- QLDB Ledgers
+- Proton
+- SESv2
+- SES Mail manager
+- Workmail
+
+## 2.1.6 (February 26, 2025)
+
+### Features
+
+Adding permissions to support resource collection for the following services:
+
+- SES
+- Codepipeline
+- Codeartifact
+- Managed Blockchain
+- Redshift Serverless
+
+## 2.1.4 (February 19, 2025)
+
+### Features
+
+- Adding MemoryDB Describe permissions to support resource collection coverage
+
 ## 2.1.3 (February 11, 2025)
 
 ### Features
